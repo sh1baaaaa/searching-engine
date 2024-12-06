@@ -11,4 +11,4 @@
 <li index="2"><h4>Библиотеки Lucene</h4></li>
 <li index="2"><h4>Thymeleaf</h4></li>
 </ul>
-<h3 class="mb-2 mt-6 text-lg first:mt-3">На данный момент проект находится в стадии разработки.</h3>
+<h3 class="mb-2 mt-6 text-lg first:mt-3">На данный момент проект находится на последней стадии разработки.</h3>

@@ -1,0 +1,25 @@
+server:
+  port: 8081
+spring:
+  main:
+    allow-circular-references: true
+  application:
+    name: indexing-service
+  datasource:
+    url: jdbc:mysql://localhost:3306/search_engine?useSSL=false&requireSSL=false&allowPublicKeyRetrieval=true
+    username: root
+    password: 2305
+  jpa:
+    hibernate:
+      ddl-auto: create
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQL8Dialect
+
+
+indexing-settings:
+  sites:
+    - url: https://nikoartgallery.com/
+      name: Никогалерея
+    - url: https://www.playback.ru/
+      name: Playback

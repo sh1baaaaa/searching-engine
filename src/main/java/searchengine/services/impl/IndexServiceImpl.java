@@ -24,17 +24,27 @@ public class IndexServiceImpl implements IndexService {
     }
 
     @Override
-    public void deleteByLemmaLemmaAndPagePath(String lemma, String pagePath) {
-        indexRepository.deleteByPagePathAndLemmaLemma(pagePath, lemma);
+    public List<IndexEntity> findByLemma(String lemma) {
+        return indexRepository.findByLemmaLemma(lemma);
     }
 
     @Override
-    public void saveAll(List<IndexEntity> indexEntities) {
-        indexRepository.saveAll(indexEntities);
+    public List<IndexEntity> findByLemmaAndSite(String lemma, String site) {
+        return indexRepository.findByLemmaAndSite(lemma, site);
     }
 
     @Override
     public void save(IndexEntity indexEntity) {
         indexRepository.save(indexEntity);
+    }
+
+    @Override
+    public Integer findLemmaCount(String lemma) {
+        return indexRepository.lemmaCount(lemma);
+    }
+
+    @Override
+    public Integer findLemmaCount(String lemma, String site) {
+        return indexRepository.lemmaCount(lemma, site);
     }
 }

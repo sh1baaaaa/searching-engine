@@ -8,9 +8,13 @@ public interface IndexService {
 
     Boolean isExistByLemmaLemmaAndPagePath(String lemma, String pagePath);
 
-    void deleteByLemmaLemmaAndPagePath(String lemma, String pagePath);
+    List<IndexEntity> findByLemma(String lemma);
 
-    void saveAll(List<IndexEntity> indexEntities);
+    List<IndexEntity> findByLemmaAndSite(String lemma, String  site);
 
     void save(IndexEntity indexEntity);
+
+    Integer findLemmaCount(String lemma);
+
+    Integer findLemmaCount(String lemma, String site);
 }

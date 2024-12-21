@@ -33,10 +33,6 @@ public class LemmaServiceImpl implements LemmaService {
         }
     }
 
-    @Override
-    public String removeHTMLTags(String text) {
-        return text.replaceAll("<[A-Za-z]>|</[A-Za-z]>", "");
-    }
 
     @Override
     public Boolean isExist(String lemma) {
@@ -51,11 +47,6 @@ public class LemmaServiceImpl implements LemmaService {
     @Override
     public void insertOrUpdateLemma(Integer siteId, String lemma) {
         lemmaRepository.insertOrUpdateLemma(siteId, lemma);
-    }
-
-    @Override
-    public void save(LemmaEntity lemmaEntity) {
-        lemmaRepository.save(lemmaEntity);
     }
 
     @Override

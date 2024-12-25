@@ -4,7 +4,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.lucene.morphology.LuceneMorphology;
 import org.apache.lucene.morphology.russian.RussianLuceneMorphology;
 import org.jsoup.Jsoup;
-import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.util.*;
@@ -21,7 +20,7 @@ public class LemmaFinder {
         return new LemmaFinder(morphology);
     }
 
-    private String deleteHTMLTags(String text) {
+    public String deleteHTMLTags(String text) {
         return Jsoup.parseBodyFragment(text).text();
     }
 

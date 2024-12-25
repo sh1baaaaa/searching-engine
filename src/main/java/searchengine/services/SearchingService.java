@@ -1,17 +1,15 @@
 package searchengine.services;
 
+import searchengine.dto.SearchingResponseDTO;
 
-
-import searchengine.entity.IndexEntity;
-import searchengine.entity.PageEntity;
 
 import java.util.List;
 
 public interface SearchingService {
 
-    List<IndexEntity> searchLemmas(String query, String offset, String limit);
+    List<SearchingResponseDTO> searchingRequest(String query, String offset, String limit);
 
-    List<IndexEntity> searchLemmasByPage(String query, String offset, String limit, String site);
+    List<SearchingResponseDTO> searchingRequest(String query, String offset, String limit, String site);
 
 
 }

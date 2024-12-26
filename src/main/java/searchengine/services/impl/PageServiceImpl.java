@@ -1,6 +1,6 @@
 package searchengine.services.impl;
 
-import lombok.Getter;
+
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -11,10 +11,7 @@ import searchengine.entity.LemmaEntity;
 import searchengine.entity.PageEntity;
 import searchengine.exception.UnknownUrlPathException;
 import searchengine.repository.PageRepository;
-import searchengine.services.IndexService;
-import searchengine.services.LemmaService;
-import searchengine.services.PageService;
-import searchengine.services.IndexingService;
+import searchengine.services.*;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -29,15 +26,15 @@ public class PageServiceImpl implements PageService {
 
     private final LemmaService lemmaService;
 
-    @Getter
-    private IndexingService siteService;
+    private final SiteService siteService;
 
     private final IndexService indexService;
 
     @Autowired
-    public PageServiceImpl(PageRepository pageRepository, LemmaService lemmasService, IndexService indexService) {
+    public PageServiceImpl(PageRepository pageRepository, LemmaService lemmasService, SiteService siteService, IndexService indexService) {
         this.pageRepository = pageRepository;
         this.lemmaService = lemmasService;
+        this.siteService = siteService;
         this.indexService = indexService;
     }
 
@@ -113,8 +110,7 @@ public class PageServiceImpl implements PageService {
                                 if (lemma.getIndexes() == null) {
                                     lemma.setIndexes(Arrays.asList(indexEntity));
                                 } else {
-                                    List<IndexEntity> indexes = new ArrayList<>();
-                                    indexes.addAll(lemma.getIndexes());
+                                    List<IndexEntity> indexes = new ArrayList<>(lemma.getIndexes());
                                     indexes.add(indexEntity);
                                     lemma.setIndexes(indexes);
                                 }
@@ -150,8 +146,5 @@ public class PageServiceImpl implements PageService {
         return pageRepository.findByPath(path);
     }
 
-    @Autowired
-    public void setSiteService(IndexingService siteService) {
-        this.siteService = siteService;
-    }
+
 }

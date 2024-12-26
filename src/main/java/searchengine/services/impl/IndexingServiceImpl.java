@@ -8,10 +8,7 @@ import searchengine.dto.property.SiteList;
 import searchengine.entity.SiteEntity;
 import searchengine.entity.Status;
 import searchengine.exception.IndexingServiceException;
-import searchengine.processor.SiteIndexingTask;
-import searchengine.repository.IndexRepository;
-import searchengine.repository.LemmaRepository;
-import searchengine.repository.PageRepository;
+import searchengine.features.SiteIndexingTask;
 import searchengine.repository.SiteRepository;
 import searchengine.services.IndexService;
 import searchengine.services.LemmaService;
@@ -28,19 +25,13 @@ public class IndexingServiceImpl implements IndexingService {
 
     private final SiteRepository siteRepository;
 
-    private final PageRepository pageRepository;
-
-    private final LemmaRepository lemmaRepository;
-
-    private final IndexRepository indexRepository;
-
     private static final ForkJoinPool FORK_JOIN_POOL = new ForkJoinPool();
 
     private final SiteList siteList;
 
     private final ExecutorService executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
 
-    private static AtomicBoolean isIndexing = new AtomicBoolean(false);
+    private static final AtomicBoolean isIndexing = new AtomicBoolean(false);
 
     private final LemmaService lemmaService;
 
@@ -53,11 +44,9 @@ public class IndexingServiceImpl implements IndexingService {
 
 
     @Autowired
-    public IndexingServiceImpl(SiteRepository siteRepository, PageRepository pageRepository, LemmaRepository lemmaRepository, IndexRepository indexRepository, SiteList siteList, LemmaService lemmaService, IndexService indexService) {
+    public IndexingServiceImpl(SiteRepository siteRepository, SiteList siteList
+            , LemmaService lemmaService, IndexService indexService) {
         this.siteRepository = siteRepository;
-        this.pageRepository = pageRepository;
-        this.lemmaRepository = lemmaRepository;
-        this.indexRepository = indexRepository;
         this.siteList = siteList;
         this.lemmaService = lemmaService;
         this.indexService = indexService;
@@ -83,7 +72,7 @@ public class IndexingServiceImpl implements IndexingService {
                             SiteEntity siteEntity = new SiteEntity();
                             siteEntity.setStatus(Status.INDEXING);
                             siteEntity.setUrl(site.getUrl());
-                            siteEntity.setName("?");
+                            siteEntity.setName(site.getName());
                             siteRepository.save(siteEntity);
 
                             SiteIndexingTask siteIndexing = new SiteIndexingTask(indexService, pageService, lemmaService, site.getUrl(),
@@ -117,26 +106,9 @@ public class IndexingServiceImpl implements IndexingService {
             throw new IndexingServiceException("Индексация не запущена");
         }
         FORK_JOIN_POOL.shutdownNow();
-        futures.forEach(future -> {
-            future.cancel(true);
-        });
+        futures.forEach(future -> future.cancel(true));
         executorService.shutdownNow();
         log.info("Индексация остановлена");
-    }
-
-    @Override
-    public void deleteByName(String name) {
-        siteRepository.deleteByName(name);
-    }
-
-    @Override
-    public SiteEntity findByUrl(String url) {
-        return siteRepository.findByUrl(url);
-    }
-
-    @Override
-    public Boolean existByUrl(String url) {
-        return siteRepository.existsByUrl(url);
     }
 
     @Autowired

@@ -1,13 +1,15 @@
 package searchengine.services.impl;
 
+import lombok.extern.slf4j.Slf4j;
 import org.apache.lucene.morphology.russian.RussianLuceneMorphology;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import searchengine.dto.SearchingResponseDTO;
+import searchengine.dto.SearchingResponseDataDTO;
 import searchengine.entity.IndexEntity;
-import searchengine.processor.LemmaFinder;
+import searchengine.features.LemmaFinder;
 import searchengine.services.IndexService;
 import searchengine.services.SearchingService;
 
@@ -16,7 +18,9 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 public class SearchingServiceImpl implements SearchingService {
 
@@ -32,22 +36,11 @@ public class SearchingServiceImpl implements SearchingService {
 
 
     @Override
-    public List<SearchingResponseDTO> searchingRequest(String query, String offset, String limit) {
-        return prepareSearchingResponse(query, null).stream()
-                .limit(Integer.parseInt(limit))
-                .skip(Long.parseLong(offset))
-                .toList();
+    public SearchingResponseDTO searchingRequest(String query, String offset, String limit, String site) {
+        return prepareSearchingResponse(query, site, offset, limit);
     }
 
-    @Override
-    public List<SearchingResponseDTO> searchingRequest(String query, String offset, String limit, String site) {
-        return prepareSearchingResponse(query, site).stream()
-                .limit(Integer.parseInt(limit))
-                .skip(Long.parseLong(offset))
-                .toList();
-    }
-
-    private List<SearchingResponseDTO> prepareSearchingResponse(String query, String site) {
+    private SearchingResponseDTO prepareSearchingResponse(String query, String site, String offset, String limit) {
 
         final Map<String, List<IndexEntity>> lemmasAndIndexMap = new HashMap<>();
 
@@ -57,8 +50,8 @@ public class SearchingServiceImpl implements SearchingService {
         if (site == null) {
             actualLemmas = queryLemmas.keySet()
                     .stream()
-                    .filter(lemma -> indexService.findLemmaCount(lemma) < 27)
-                    .toList();
+                    .filter(lemma -> indexService.findLemmaCount(lemma) < 70)
+                    .collect(Collectors.toList());
             actualLemmas.sort(Comparator.comparing(queryLemmas::get));
 
             actualLemmas.forEach(lemma1 -> {
@@ -76,8 +69,8 @@ public class SearchingServiceImpl implements SearchingService {
         } else {
             actualLemmas = queryLemmas.keySet()
                     .stream()
-                    .filter(lemma -> indexService.findLemmaCount(lemma, site) < 27)
-                    .toList();
+                    .filter(lemma -> indexService.findLemmaCount(lemma) < 70)
+                    .collect(Collectors.toList());
             actualLemmas.sort(Comparator.comparing(queryLemmas::get));
 
             actualLemmas.forEach(lemma -> {
@@ -94,13 +87,24 @@ public class SearchingServiceImpl implements SearchingService {
         }
 
 
-        return prepareSearchingResponseDTOList(lemmasAndIndexMap, actualLemmas, query);
+        List<SearchingResponseDataDTO> responseData = prepareSearchingResponseDataDTO(lemmasAndIndexMap
+                , actualLemmas, query)
+                .stream()
+                .limit(Integer.parseInt(limit))
+                .skip(Long.parseLong(offset))
+                .toList();
+
+        return SearchingResponseDTO.builder()
+                .count(responseData.size())
+                .data(responseData)
+                .result(true)
+                .build();
     }
 
-    private List<SearchingResponseDTO> prepareSearchingResponseDTOList(Map<String, List<IndexEntity>> pages
+    private List<SearchingResponseDataDTO> prepareSearchingResponseDataDTO(Map<String, List<IndexEntity>> pages
             , List<String> lemmas, String query) {
         List<String> checkedPage = new ArrayList<>();
-        List<SearchingResponseDTO> response = new ArrayList<>();
+        List<SearchingResponseDataDTO> response = new ArrayList<>();
 
         pages.forEach((key, value) -> value.forEach(index1 -> {
             if (!checkedPage.contains(index1.getPage().getPath())) {
@@ -117,17 +121,27 @@ public class SearchingServiceImpl implements SearchingService {
                     }
                 });
 
-                response.add(SearchingResponseDTO.builder()
-                        .relevance(relevance.get())
-                        .uri(index1.getPage().getPath())
-                        .title(index1.getPage().getSite().getName())
-                        .snippet(createSnippet(index1.getPage().getContent(), lemmas, query))
-                        .build());
+                try {
+                    response.add(SearchingResponseDataDTO.builder()
+                            .relevance(relevance.get())
+                            .uri(index1.getPage().getPath())
+                            .title(Jsoup.connect(index1.getPage()
+                                    .getSite()
+                                    .getUrl()
+                                    .substring(0, index1.getPage().getSite().getUrl().length() - 1)
+                                    + index1.getPage().getPath()).get().title())
+                            .snippet(createSnippet(index1.getPage().getContent(), lemmas, query))
+                            .site(index1.getPage().getSite().getUrl())
+                            .siteName(index1.getPage().getSite().getName())
+                            .build());
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
 
                 checkedPage.add(index1.getPage().getPath());
             }
         }));
-        response.sort(Comparator.comparing(SearchingResponseDTO::getRelevance).reversed());
+        response.sort(Comparator.comparing(SearchingResponseDataDTO::getRelevance).reversed());
         return response;
     }
 

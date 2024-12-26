@@ -1,6 +1,5 @@
 package searchengine.services;
 
-import searchengine.entity.SiteEntity;
 
 public interface IndexingService {
 
@@ -8,10 +7,5 @@ public interface IndexingService {
 
     void stopIndexing();
 
-    void deleteByName(String name);
-
-    SiteEntity findByUrl(String url);
-
-    Boolean existByUrl(String url);
 
 }

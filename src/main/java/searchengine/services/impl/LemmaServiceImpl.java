@@ -5,7 +5,7 @@ import org.apache.lucene.morphology.russian.RussianLuceneMorphology;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import searchengine.entity.LemmaEntity;
-import searchengine.processor.LemmaFinder;
+import searchengine.features.LemmaFinder;
 import searchengine.repository.LemmaRepository;
 import searchengine.services.LemmaService;
 

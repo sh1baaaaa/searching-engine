@@ -1,4 +1,4 @@
-package searchengine.processor;
+package searchengine.features;
 
 import searchengine.entity.PageEntity;
 

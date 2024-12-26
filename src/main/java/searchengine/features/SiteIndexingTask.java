@@ -1,4 +1,4 @@
-package searchengine.processor;
+package searchengine.features;
 
 import lombok.SneakyThrows;
 import org.apache.lucene.morphology.russian.RussianLuceneMorphology;

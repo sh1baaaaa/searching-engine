@@ -6,9 +6,11 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import searchengine.dto.ResponseMessageDTO;
+import searchengine.dto.SearchingResponseDTO;
 import searchengine.dto.statistics.StatisticsResponse;
 import searchengine.services.PageService;
 import searchengine.services.IndexingService;
+import searchengine.services.SearchingService;
 import searchengine.services.StatisticsService;
 
 @RestController
@@ -23,9 +25,12 @@ public class ApiController {
     @Getter
     private PageService pageService;
 
+    private final SearchingService searchingService;
+
     @Autowired
-    public ApiController(StatisticsService statisticsService) {
+    public ApiController(StatisticsService statisticsService, SearchingService searchingService) {
         this.statisticsService = statisticsService;
+        this.searchingService = searchingService;
     }
 
     @GetMapping("/statistics")
@@ -56,12 +61,12 @@ public class ApiController {
     }
 
     @GetMapping("/search")
-    public ResponseEntity<StatisticsResponse> search(@RequestParam String query,
-                                                     @RequestParam(required = false) String site,
-                                                     @RequestParam(required = false, defaultValue = "0") String offset,
-                                                     @RequestParam(defaultValue = "20"
+    public ResponseEntity<SearchingResponseDTO> search(@RequestParam String query,
+                                                             @RequestParam(required = false) String site,
+                                                             @RequestParam(required = false, defaultValue = "0") String offset,
+                                                             @RequestParam(defaultValue = "20"
                                                              , required = false) String limit) {
-        return new ResponseEntity<>(new StatisticsResponse(), HttpStatus.OK);
+        return new ResponseEntity<>(searchingService.searchingRequest(query, offset, limit, site), HttpStatus.OK);
     }
 
     @Autowired

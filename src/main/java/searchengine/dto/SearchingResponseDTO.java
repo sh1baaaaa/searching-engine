@@ -3,18 +3,18 @@ package searchengine.dto;
 import lombok.Builder;
 import lombok.Data;
 
+import java.util.List;
+
 
 @Data
 @Builder
 public class SearchingResponseDTO {
 
-    private String uri;
+   private Boolean result;
 
-    private String title;
+   private Integer count;
 
-    private String snippet;
-
-    private Float relevance;
+   private List<SearchingResponseDataDTO> data;
 
 }
 

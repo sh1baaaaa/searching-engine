@@ -1,36 +1,24 @@
-version: '3.7'
+version: '3.9'
 
 services:
   db:
     image: mysql:latest
-    restart: always
     environment:
       MYSQL_ROOT_PASSWORD: 2305
       MYSQL_DATABASE: search_engine
-      MYSQL_USER: root
       MYSQL_PASSWORD: 2305
     volumes:
       - ./mysql_data:/var/lib/mysql
     ports:
-      - "3306:3306"
-
-  phpmyadmin:
-    image: phpmyadmin/phpmyadmin:latest
-    restart: always
-    depends_on:
-      - db
-    environment:
-      PMA_HOST: db
-      MYSQL_ROOT_PASSWORD: 2305
-    ports:
-      - "8080:80"
+      - "8080:8080"
 
   app:
+    image: openjdk:17
     build: .
     environment:
-      - SPRING_PROFILES_ACTIVE=prod
+      - SPRING_PROFILES_ACTIVE=dev
     ports:
       - "8081:8081"
     depends_on:
       - db
-    command: java -jar target/
+    command: java -jar target/SearchEngine-1.0-SNAPSHOT.jar

@@ -16,11 +16,11 @@ public class IndexEntity {
     @Id
     private Integer id;
 
-    @ManyToOne(cascade = {CascadeType.MERGE, CascadeType.REMOVE})
+    @ManyToOne(cascade = {CascadeType.MERGE})
     @JoinColumn(name = "page_id", nullable = false)
     private PageEntity page;
 
-    @ManyToOne(cascade = {CascadeType.MERGE, CascadeType.REMOVE})
+    @ManyToOne(cascade = {CascadeType.MERGE})
     @JoinColumn(name = "lemma_id", nullable = false)
     private LemmaEntity lemma;
 

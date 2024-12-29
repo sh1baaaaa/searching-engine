@@ -1,6 +1,6 @@
 package searchengine.entity;
 
-public enum Status {
+public enum SiteStatus {
 
     INDEXING,
     INDEXED,

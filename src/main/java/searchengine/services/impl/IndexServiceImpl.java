@@ -43,8 +43,4 @@ public class IndexServiceImpl implements IndexService {
         return indexRepository.lemmaCount(lemma);
     }
 
-    @Override
-    public Integer findLemmaCount(String lemma, String site) {
-        return indexRepository.lemmaCount(lemma, site);
-    }
 }

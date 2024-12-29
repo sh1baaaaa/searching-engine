@@ -1,21 +1,19 @@
 package searchengine.services.impl;
 
-import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import searchengine.dto.IndexingResponse;
 import searchengine.dto.property.SiteList;
 import searchengine.entity.SiteEntity;
-import searchengine.entity.Status;
-import searchengine.exception.IndexingServiceException;
+import searchengine.entity.SiteStatus;
 import searchengine.features.SiteIndexingTask;
+import searchengine.repository.IndexRepository;
+import searchengine.repository.LemmaRepository;
+import searchengine.repository.PageRepository;
 import searchengine.repository.SiteRepository;
-import searchengine.services.IndexService;
-import searchengine.services.LemmaService;
-import searchengine.services.PageService;
-import searchengine.services.IndexingService;
+import searchengine.services.*;
 
-import java.util.List;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -23,97 +21,149 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @Service
 public class IndexingServiceImpl implements IndexingService {
 
+    private final IndexRepository indexRepository;
+
+    private final LemmaRepository lemmaRepository;
+
+    private final PageRepository pageRepository;
+
     private final SiteRepository siteRepository;
 
-    private static final ForkJoinPool FORK_JOIN_POOL = new ForkJoinPool();
+    private static ForkJoinPool FORK_JOIN_POOL;
 
     private final SiteList siteList;
 
-    private final ExecutorService executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
+    private static ExecutorService executorService;
 
-    private static final AtomicBoolean isIndexing = new AtomicBoolean(false);
+    public static final AtomicBoolean isIndexing = new AtomicBoolean(false);
 
     private final LemmaService lemmaService;
 
     private final IndexService indexService;
 
-    private final List<Future<?>> futures = new CopyOnWriteArrayList<>();
+    private static ExecutorService mainExecutor;
 
-    @Getter
-    private PageService pageService;
+    private final PageService pageService;
 
 
     @Autowired
-    public IndexingServiceImpl(SiteRepository siteRepository, SiteList siteList
-            , LemmaService lemmaService, IndexService indexService) {
+    public IndexingServiceImpl(IndexRepository indexRepository, LemmaRepository lemmaRepository, PageRepository pageRepository, SiteRepository siteRepository, SiteList siteList
+            , LemmaService lemmaService, IndexService indexService, PageService pageService) {
+        this.indexRepository = indexRepository;
+        this.lemmaRepository = lemmaRepository;
+        this.pageRepository = pageRepository;
         this.siteRepository = siteRepository;
         this.siteList = siteList;
         this.lemmaService = lemmaService;
         this.indexService = indexService;
+        this.pageService = pageService;
     }
 
 
     @Override
-    public void startIndexing() {
+    public IndexingResponse startIndexing() {
+        FORK_JOIN_POOL = new ForkJoinPool(24);
+        mainExecutor = Executors.newFixedThreadPool(6);
+        executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
+
+        log.info("Попытка запуска индексации");
         if (isIndexing.get()) {
-            throw new IndexingServiceException("Индексация уже запущена");
+            log.error("Индексация уже запущена");
+            return IndexingResponse.builder()
+                    .result(false)
+                    .error("Индексация уже запущена")
+                    .build();
         }
 
-        siteRepository.deleteAll();
+        deleteAllSitesData();
         isIndexing.set(true);
 
-        executorService.submit(() -> {
-            try {
+        executorService.execute(() -> siteList
+                .getSites()
+                .forEach(site -> mainExecutor.execute(() -> {
+                    log.info("Запущена индексация страницы {}", site.getUrl());
 
-                siteList.getSites().forEach(site -> {
-                    Future<?> future = executorService.submit(() -> {
-                        try {
-                            log.info("Запущена индексация страницы {}", site.getName());
-                            SiteEntity siteEntity = new SiteEntity();
-                            siteEntity.setStatus(Status.INDEXING);
-                            siteEntity.setUrl(site.getUrl());
-                            siteEntity.setName(site.getName());
-                            siteRepository.save(siteEntity);
+                    SiteEntity siteEntity = new SiteEntity();
+                    siteEntity.setStatus(SiteStatus.INDEXING);
+                    siteEntity.setUrl(site.getUrl());
+                    siteEntity.setName(site.getName());
+                    siteRepository.save(siteEntity);
 
-                            SiteIndexingTask siteIndexing = new SiteIndexingTask(indexService, pageService, lemmaService, site.getUrl(),
-                                    siteRepository.findByUrl(siteEntity.getUrl()), site.getUrl());
+                    SiteIndexingTask siteIndexing = new SiteIndexingTask(indexService, pageService, lemmaService, site.getUrl(),
+                            siteRepository.findByUrl(siteEntity.getUrl()), site.getUrl(), siteRepository);
 
-                            FORK_JOIN_POOL.invoke(siteIndexing);
-                        } catch (Exception e) {
-                            e.printStackTrace();
-                        }
-                    });
-                    futures.add(future);
-                });
-
-                for (Future<?> future : futures) {
-                    future.get();
+                    FORK_JOIN_POOL.invoke(siteIndexing);
                 }
-            } catch (InterruptedException | ExecutionException e) {
-                Thread.currentThread().interrupt();
-                log.error("Ошибка при ожидании завершения индексации: {}", e.getMessage());
-            } finally {
-                isIndexing.set(false);
-                log.info("Индексация завершена");
-            }
-        });
+                ))
+        );
+
+        return IndexingResponse.builder()
+                .result(true)
+                .build();
     }
+
 
     @Override
-    public void stopIndexing() {
+    public IndexingResponse stopIndexing() {
         log.warn("Попытка остановить индексацию");
         if (!isIndexing.get()) {
-            throw new IndexingServiceException("Индексация не запущена");
+            return IndexingResponse.builder()
+                    .result(false)
+                    .error("Индексация не запущена")
+                    .build();
         }
-        FORK_JOIN_POOL.shutdownNow();
-        futures.forEach(future -> future.cancel(true));
-        executorService.shutdownNow();
+
+        FORK_JOIN_POOL.shutdown();
+        try {
+            if (FORK_JOIN_POOL.awaitTermination(300, TimeUnit.MILLISECONDS)) {
+                FORK_JOIN_POOL.shutdownNow();
+                if (FORK_JOIN_POOL.awaitTermination(300, TimeUnit.MILLISECONDS)) {
+                    log.error("ForkJoinPool did not terminate!");
+                }
+            }
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+
+        mainExecutor.shutdown();
+        try {
+            if (mainExecutor.awaitTermination(300, TimeUnit.MILLISECONDS)) {
+                mainExecutor.shutdownNow();
+                if (mainExecutor.awaitTermination(300, TimeUnit.MILLISECONDS)) {
+                    log.error("MainExecutor did not terminate!");
+                }
+            }
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+
+        executorService.shutdown();
+        try {
+            if (executorService.awaitTermination(300, TimeUnit.MILLISECONDS)) {
+                executorService.shutdownNow();
+                if (executorService.awaitTermination(300, TimeUnit.MILLISECONDS)) {
+                    log.error("ExecutorService did not terminate!");
+                }
+            }
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+
+        isIndexing.set(false);
         log.info("Индексация остановлена");
+        siteRepository.updateAllSitesStatus("INDEXED");
+
+        return IndexingResponse
+                .builder()
+                .result(true)
+                .build();
     }
 
-    @Autowired
-    public void setPageService(PageService pageService) {
-        this.pageService = pageService;
+    public void deleteAllSitesData() {
+        indexRepository.deleteAll();
+        pageRepository.deleteAll();
+        lemmaRepository.deleteAll();
+        siteRepository.deleteAll();
     }
 
 }

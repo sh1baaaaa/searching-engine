@@ -19,7 +19,7 @@ public class PageEntity {
     private Integer id;
 
     @JoinColumn(name = "site_id", nullable = false)
-    @ManyToOne
+    @ManyToOne(cascade = CascadeType.MERGE)
     private SiteEntity site;
 
     @Column(name = "path", nullable = false, columnDefinition = "VARCHAR(255)")
@@ -31,7 +31,7 @@ public class PageEntity {
     @Column(name = "content", nullable = false, columnDefinition = "MEDIUMTEXT")
     private String content;
 
-    @OneToMany(mappedBy = "page", cascade = {CascadeType.PERSIST, CascadeType.REMOVE})
+    @OneToMany(mappedBy = "page", cascade = {CascadeType.PERSIST, CascadeType.MERGE, CascadeType.REMOVE})
     private List<IndexEntity> indexes;
 
 }

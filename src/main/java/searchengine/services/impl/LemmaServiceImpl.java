@@ -49,9 +49,5 @@ public class LemmaServiceImpl implements LemmaService {
         lemmaRepository.insertOrUpdateLemma(siteId, lemma);
     }
 
-    @Override
-    public LemmaEntity findByLemmaAndSite(String lemma, String site) {
-        return lemmaRepository.findByLemmaAndSiteUrl(lemma, site);
-    }
 
 }

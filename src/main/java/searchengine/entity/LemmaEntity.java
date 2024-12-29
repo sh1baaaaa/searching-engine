@@ -19,7 +19,7 @@ public class LemmaEntity {
     private Integer id;
 
     @JoinColumn(name = "site_id", nullable = false)
-    @ManyToOne
+    @ManyToOne(cascade = {CascadeType.MERGE, CascadeType.REMOVE})
     private SiteEntity site;
 
     @Column(name = "lemma", nullable = false, unique = true)
@@ -28,6 +28,6 @@ public class LemmaEntity {
     @Column(name = "frequency", nullable = false)
     private Integer frequency;
 
-    @OneToMany(mappedBy = "lemma", cascade = CascadeType.MERGE, fetch = FetchType.EAGER)
+    @OneToMany(mappedBy = "lemma", cascade = {CascadeType.MERGE, CascadeType.REMOVE}, fetch = FetchType.EAGER)
     private List<IndexEntity> indexes;
 }

@@ -15,12 +15,15 @@ public interface LemmaRepository extends JpaRepository<LemmaEntity, Integer> {
 
     LemmaEntity findByLemma(String lemma);
 
-    LemmaEntity findByLemmaAndSiteUrl(String lemma, String siteUrl);
-
     @Modifying
     @Transactional
     @Query(value = "INSERT INTO search_engine.lemma (site_id, lemma, frequency) VALUES (:siteId, :lemma, 1) " +
             "ON DUPLICATE KEY UPDATE frequency = (frequency + 1)", nativeQuery = true)
     void insertOrUpdateLemma(@Param("siteId") Integer siteId, @Param("lemma") String lemma);
+
+    @Modifying
+    @Transactional
+    @Query(nativeQuery = true, value = "DELETE FROM lemma")
+    void deleteAll();
 
 }

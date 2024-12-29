@@ -5,7 +5,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import searchengine.dto.ResponseMessageDTO;
+import searchengine.dto.IndexingResponse;
 import searchengine.dto.SearchingResponseDTO;
 import searchengine.dto.statistics.StatisticsResponse;
 import searchengine.services.PageService;
@@ -39,23 +39,23 @@ public class ApiController {
     }
 
     @GetMapping("/startIndexing")
-    public ResponseEntity<ResponseMessageDTO> startIndexing() {
+    public ResponseEntity<IndexingResponse> startIndexing() {
         siteService.startIndexing();
-        return new ResponseEntity<>(ResponseMessageDTO.builder()
+        return new ResponseEntity<>(IndexingResponse.builder()
                 .result(true)
                 .build(), HttpStatus.OK);
     }
 
     @GetMapping("/stopIndexing")
-    public ResponseEntity<ResponseMessageDTO> stopIndexing() {
+    public ResponseEntity<IndexingResponse> stopIndexing() {
         siteService.stopIndexing();
-        return new ResponseEntity<>(ResponseMessageDTO.builder().result(true).build(), HttpStatus.OK);
+        return new ResponseEntity<>(IndexingResponse.builder().result(true).build(), HttpStatus.OK);
     }
 
     @PostMapping("/indexPage")
-    public ResponseEntity<ResponseMessageDTO> indexPage(@RequestParam String url) {
+    public ResponseEntity<IndexingResponse> indexPage(@RequestParam String url) {
         pageService.indexByUrl(url);
-        return new ResponseEntity<>(ResponseMessageDTO.builder()
+        return new ResponseEntity<>(IndexingResponse.builder()
                 .result(true)
                 .build(), HttpStatus.OK);
     }

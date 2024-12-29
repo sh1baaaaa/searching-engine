@@ -25,4 +25,5 @@ public class SiteServiceImpl implements SiteService {
     public Boolean existByUrl(String url) {
         return siteRepository.existsByUrl(url);
     }
+
 }

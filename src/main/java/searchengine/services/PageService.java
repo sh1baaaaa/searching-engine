@@ -10,7 +10,4 @@ public interface PageService {
 
     void save(PageEntity pageEntity);
 
-    void processPage(PageEntity pageEntity);
-
-    PageEntity findByPath(String path);
 }

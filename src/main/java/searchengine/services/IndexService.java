@@ -16,5 +16,4 @@ public interface IndexService {
 
     Integer findLemmaCount(String lemma);
 
-    Integer findLemmaCount(String lemma, String site);
 }

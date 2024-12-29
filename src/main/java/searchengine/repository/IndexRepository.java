@@ -1,8 +1,10 @@
 package searchengine.repository;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 import searchengine.entity.IndexEntity;
 
 import java.util.List;
@@ -18,13 +20,6 @@ public interface IndexRepository extends JpaRepository<IndexEntity, Integer> {
             , value = "SELECT COUNT(*) FROM `index` i JOIN lemma l ON i.lemma_id = l.id WHERE l.lemma = :lemma")
     Integer lemmaCount(String lemma);
 
-    @Query(nativeQuery = true
-            , value = "SELECT COUNT(*) FROM `index` i " +
-            "JOIN lemma l ON i.lemma_id = l.id " +
-            "JOIN site s ON l.site_id = s.id " +
-            "WHERE l.lemma = :lemma AND s.name = :site")
-    Integer lemmaCount(String lemma, String site);
-
     @Query(nativeQuery = true,
             value = "SELECT * FROM `index` i " +
                     "JOIN page p ON i.page_id = p.id " +
@@ -33,4 +28,8 @@ public interface IndexRepository extends JpaRepository<IndexEntity, Integer> {
                     "WHERE s.url = :site AND l.lemma = :lemma ")
     List<IndexEntity> findByLemmaAndSite(String lemma, String site);
 
+    @Modifying
+    @Transactional
+    @Query(nativeQuery = true, value = "DELETE FROM `index`")
+    void deleteAll();
 }

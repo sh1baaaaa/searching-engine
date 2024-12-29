@@ -14,6 +14,5 @@ public interface LemmaService {
 
     void insertOrUpdateLemma(Integer siteId, String lemma);
 
-    LemmaEntity findByLemmaAndSite(String lemma, String site);
 
 }

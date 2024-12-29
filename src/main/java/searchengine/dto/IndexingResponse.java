@@ -7,7 +7,7 @@ import lombok.Data;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 @Data
 @Builder
-public class ResponseMessageDTO {
+public class IndexingResponse {
 
     private Boolean result;
 

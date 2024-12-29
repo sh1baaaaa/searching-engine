@@ -136,15 +136,5 @@ public class PageServiceImpl implements PageService {
         pageRepository.save(pageEntity);
     }
 
-    @Override
-    public void processPage(PageEntity pageEntity) {
-
-    }
-
-    @Override
-    public PageEntity findByPath(String path) {
-        return pageRepository.findByPath(path);
-    }
-
 
 }

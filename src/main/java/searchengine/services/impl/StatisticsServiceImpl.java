@@ -34,18 +34,32 @@ public class StatisticsServiceImpl implements StatisticsService {
         List<DetailedStatisticsItem> detailed = new ArrayList<>();
         List<Site> sitesList = sites.getSites();
         sitesList.forEach(site -> {
-            SiteEntity siteEntity = siteService.findByUrl(site.getUrl());
+
             DetailedStatisticsItem item = new DetailedStatisticsItem();
-            item.setName(siteEntity.getName());
-            item.setUrl(siteEntity.getUrl());
-            item.setPages(siteEntity.getPages().size());
-            item.setLemmas(siteEntity.getLemmas().size());
-            item.setStatus(siteEntity.getStatus().toString());
-            item.setError(siteEntity.getLastError() == null ? "-" : siteEntity.getLastError());
-            item.setStatusTime(siteEntity.getStatusTime().toInstant(ZoneOffset.UTC).toEpochMilli());
-            total.setPages(total.getPages() + siteEntity.getPages().size());
-            total.setLemmas(total.getLemmas() + siteEntity.getLemmas().size());
-            detailed.add(item);
+            SiteEntity siteEntity = siteService.findByUrl(site.getUrl());
+            if (siteEntity != null) {
+                item.setName(siteEntity.getName());
+                item.setUrl(siteEntity.getUrl());
+                item.setPages(siteEntity.getPages().size());
+                item.setLemmas(siteEntity.getLemmas().size());
+                item.setStatus(siteEntity.getStatus().toString());
+                item.setError(siteEntity.getLastError() == null ? "-" : siteEntity.getLastError());
+                item.setStatusTime(siteEntity.getStatusTime().toInstant(ZoneOffset.UTC).toEpochMilli());
+                total.setPages(total.getPages() + siteEntity.getPages().size());
+                total.setLemmas(total.getLemmas() + siteEntity.getLemmas().size());
+                detailed.add(item);
+            } else {
+                item.setName(site.getName());
+                item.setUrl(site.getUrl());
+                item.setPages(0);
+                item.setLemmas(0);
+                item.setStatus("Страница пока не проиндексирована");
+                item.setError("-");
+                item.setStatusTime(System.currentTimeMillis());
+                total.setPages(0);
+                total.setLemmas(0);
+                detailed.add(item);
+            }
         });
 
         StatisticsResponse response = new StatisticsResponse();

@@ -104,7 +104,8 @@ public class SiteIndexingTask extends RecursiveTask<List<PageEntity>> implements
 
                     if (!seenSites.contains(childNode)
                             && !childNode.isEmpty()
-                            && childNode.startsWith(mainLink)
+                            && (childNode.startsWith(mainLink)
+                            || childNode.startsWith("http" + mainLink.split("https")[1]))
                             && !childNode.equals(mainLink)) {
                         seenSites.add(childNode);
 

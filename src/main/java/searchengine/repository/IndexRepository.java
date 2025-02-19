@@ -20,6 +20,9 @@ public interface IndexRepository extends JpaRepository<IndexEntity, Integer> {
             , value = "SELECT COUNT(*) FROM `index` i JOIN lemma l ON i.lemma_id = l.id WHERE l.lemma = :lemma")
     Integer lemmaCount(String lemma);
 
+//    @Query(nativeQuery = true
+//            , value = "EXISTS ")
+
     @Query(nativeQuery = true,
             value = "SELECT * FROM `index` i " +
                     "JOIN page p ON i.page_id = p.id " +

@@ -19,6 +19,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Slf4j
 @Service
@@ -46,33 +47,29 @@ public class SearchingServiceImpl implements SearchingService {
 
         Map<String, Integer> queryLemmas = lemmaFinder.collectLemmas(query);
 
-        List<String> actualLemmas;
+        List<String> actualLemmas = queryLemmas.keySet()
+                .stream()
+                .filter(lemma -> indexService.findLemmaCount(lemma) < 100)
+                .collect(Collectors.toList());;
+        actualLemmas.sort(Comparator.comparing(queryLemmas::get));
+
         if (site == null) {
-            actualLemmas = queryLemmas.keySet()
-                    .stream()
-                    .filter(lemma -> indexService.findLemmaCount(lemma) < 70)
-                    .collect(Collectors.toList());
-            actualLemmas.sort(Comparator.comparing(queryLemmas::get));
-
-            actualLemmas.forEach(lemma1 -> {
+            actualLemmas.forEach(lemma -> {
                 AtomicReference<List<IndexEntity>> foundLemmas
-                        = new AtomicReference<>(indexService.findByLemma(actualLemmas.get(0)));
+                        = new AtomicReference<>(indexService.findByLemma(lemma));
 
-                actualLemmas.forEach(lemma2 -> foundLemmas.set(foundLemmas
-                        .get()
-                        .stream()
-                        .filter(index -> indexService.findByLemma(lemma2).contains(index))
-                        .toList()));
-                lemmasAndIndexMap.put(lemma1, foundLemmas.get());
+                actualLemmas.stream()
+                        .filter(secondLemma -> !secondLemma.equals(lemma))
+                        .forEach(secondLemma -> foundLemmas.set(foundLemmas.get()
+                                .stream()
+                                .filter(index -> index.getPage().getIndexes()
+                                        .stream()
+                                        .anyMatch(check -> check.getLemma().getLemma().equals(secondLemma)))
+                                .toList()));
+
+                lemmasAndIndexMap.put(lemma, foundLemmas.get());
             });
-
         } else {
-            actualLemmas = queryLemmas.keySet()
-                    .stream()
-                    .filter(lemma -> indexService.findLemmaCount(lemma) < 70)
-                    .collect(Collectors.toList());
-            actualLemmas.sort(Comparator.comparing(queryLemmas::get));
-
             actualLemmas.forEach(lemma -> {
                 AtomicReference<List<IndexEntity>> foundLemmas
                         = new AtomicReference<>(indexService.findByLemmaAndSite(actualLemmas.get(0), site));
@@ -163,7 +160,6 @@ public class SearchingServiceImpl implements SearchingService {
             }
         }
         else{
-            // Если в мета-тегах ничего нет, ищем в основном тексте
             String text = lemmaFinder.deleteHTMLTags(content);
             String sentenceRegex = "[^.!?]*[.!?]";
             Pattern pattern = Pattern.compile(sentenceRegex);
@@ -190,10 +186,10 @@ public class SearchingServiceImpl implements SearchingService {
     private Boolean containsAny(String text, Collection<String> lemmas) {
         for (String lemma : lemmas) {
             if (text.contains(lemma)) {
-                return true; // Возвращаем true, если найдено хотя бы одно совпадение
+                return true;
             }
         }
-        return false; // Возвращаем false, если ничего не найдено
+        return false;
     }
 
 }

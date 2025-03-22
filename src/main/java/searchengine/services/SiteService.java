@@ -6,6 +6,5 @@ public interface SiteService {
 
     SiteEntity findByUrl(String url);
 
-    Boolean existByUrl(String url);
 
 }

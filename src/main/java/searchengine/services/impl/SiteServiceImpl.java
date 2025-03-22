@@ -18,12 +18,7 @@ public class SiteServiceImpl implements SiteService {
 
     @Override
     public SiteEntity findByUrl(String url) {
-        return siteRepository.findByUrl(url);
-    }
-
-    @Override
-    public Boolean existByUrl(String url) {
-        return siteRepository.existsByUrl(url);
+        return siteRepository.findSiteByUrl(url);
     }
 
 }

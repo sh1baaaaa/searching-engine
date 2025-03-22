@@ -1,13 +1,16 @@
 package searchengine.entity;
 
 import javax.persistence.*;
-import lombok.Getter;
-import lombok.Setter;
+
+import lombok.*;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 @Setter
 @Getter
 @Table(name = "site")
@@ -36,7 +39,7 @@ public class SiteEntity {
     @Column(name = "name", nullable = false)
     private String name;
 
-    @OneToMany(mappedBy = "site", cascade = {CascadeType.REMOVE, CascadeType.PERSIST})
+    @OneToMany(mappedBy = "siteId", cascade = {CascadeType.REMOVE, CascadeType.PERSIST})
     private List<PageEntity> pages;
 
     @OneToMany(mappedBy = "site", cascade = {CascadeType.REMOVE, CascadeType.PERSIST})

@@ -5,7 +5,7 @@ import searchengine.dto.SearchingResponseDTO;
 
 public interface SearchingService {
 
-    SearchingResponseDTO searchingRequest(String query, String offset, String limit, String site);
+    SearchingResponseDTO search(String query, String siteUrl, Integer offset, Integer limit);
 
 
 }

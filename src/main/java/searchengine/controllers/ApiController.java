@@ -8,7 +8,6 @@ import org.springframework.web.bind.annotation.*;
 import searchengine.dto.IndexingResponse;
 import searchengine.dto.SearchingResponseDTO;
 import searchengine.dto.statistics.StatisticsResponse;
-import searchengine.services.PageService;
 import searchengine.services.IndexingService;
 import searchengine.services.SearchingService;
 import searchengine.services.StatisticsService;
@@ -18,18 +17,14 @@ import searchengine.services.StatisticsService;
 public class ApiController {
 
     private final StatisticsService statisticsService;
-
-    @Getter
-    private IndexingService siteService;
-
-    @Getter
-    private PageService pageService;
+    private final IndexingService siteService;
 
     private final SearchingService searchingService;
 
     @Autowired
-    public ApiController(StatisticsService statisticsService, SearchingService searchingService) {
+    public ApiController(StatisticsService statisticsService, IndexingService siteService, SearchingService searchingService) {
         this.statisticsService = statisticsService;
+        this.siteService = siteService;
         this.searchingService = searchingService;
     }
 
@@ -54,7 +49,7 @@ public class ApiController {
 
     @PostMapping("/indexPage")
     public ResponseEntity<IndexingResponse> indexPage(@RequestParam String url) {
-        pageService.indexByUrl(url);
+        siteService.indexPage(url);
         return new ResponseEntity<>(IndexingResponse.builder()
                 .result(true)
                 .build(), HttpStatus.OK);
@@ -63,19 +58,12 @@ public class ApiController {
     @GetMapping("/search")
     public ResponseEntity<SearchingResponseDTO> search(@RequestParam String query,
                                                              @RequestParam(required = false) String site,
-                                                             @RequestParam(required = false, defaultValue = "0") String offset,
+                                                             @RequestParam(required = false, defaultValue = "0")
+                                                           Integer offset,
                                                              @RequestParam(defaultValue = "20"
-                                                             , required = false) String limit) {
-        return new ResponseEntity<>(searchingService.searchingRequest(query, offset, limit, site), HttpStatus.OK);
+                                                             , required = false) Integer limit) {
+        return new ResponseEntity<>(searchingService.search(query, site, offset, limit), HttpStatus.OK);
     }
 
-    @Autowired
-    public void setSiteService(IndexingService siteService) {
-        this.siteService = siteService;
-    }
 
-    @Autowired
-    public void setPageService(PageService pageService) {
-        this.pageService = pageService;
-    }
 }

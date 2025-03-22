@@ -1,169 +1,250 @@
 package searchengine.services.impl;
 
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.jsoup.Connection;
+import org.jsoup.nodes.Document;
 import org.springframework.stereotype.Service;
+import searchengine.config.JsoupSession;
+import searchengine.config.Site;
+import searchengine.config.SitesList;
 import searchengine.dto.IndexingResponse;
-import searchengine.dto.property.SiteList;
+import searchengine.dto.PageDTO;
+import searchengine.entity.IndexEntity;
+import searchengine.entity.PageEntity;
 import searchengine.entity.SiteEntity;
 import searchengine.entity.SiteStatus;
-import searchengine.features.SiteIndexingTask;
+import searchengine.features.LemmaFinder;
+import searchengine.features.IndexingTask;
 import searchengine.repository.IndexRepository;
 import searchengine.repository.LemmaRepository;
 import searchengine.repository.PageRepository;
 import searchengine.repository.SiteRepository;
 import searchengine.services.*;
 
+import java.io.IOException;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
 public class IndexingServiceImpl implements IndexingService {
 
-    private final IndexRepository indexRepository;
+    private final SiteRepository siteRepo;
 
-    private final LemmaRepository lemmaRepository;
+    private final PageRepository pageRepo;
 
-    private final PageRepository pageRepository;
+    private final IndexRepository indexRepo;
 
-    private final SiteRepository siteRepository;
+    private final LemmaRepository lemmaRepo;
 
-    private static ForkJoinPool FORK_JOIN_POOL;
+    private final SitesList sites;
 
-    private final SiteList siteList;
+    private final JsoupSession connectionFab;
 
-    private static ExecutorService executorService;
+    private final LemmaFinder lemmaFinder;
 
-    public static final AtomicBoolean isIndexing = new AtomicBoolean(false);
+    public static AtomicBoolean isIndexing = new AtomicBoolean(false);
 
-    private final LemmaService lemmaService;
+    static final String[] errors = {
+            "Данная страница находится за пределами сайтов, указанных в конфигурационном файле",
+            "Индексация уже запущена",
+            "Индексация не запущена"};
 
-    private final IndexService indexService;
+    private final Map<String, Boolean> statusOfIndexing = new ConcurrentHashMap<>();
+    private static final ForkJoinPool forkJoinPool = new ForkJoinPool(24);
+    public static final ExecutorService mainExecutor = Executors.newFixedThreadPool(6);
 
-    private static ExecutorService mainExecutor;
-
-    private final PageService pageService;
-
-
-    @Autowired
-    public IndexingServiceImpl(IndexRepository indexRepository, LemmaRepository lemmaRepository, PageRepository pageRepository, SiteRepository siteRepository, SiteList siteList
-            , LemmaService lemmaService, IndexService indexService, PageService pageService) {
-        this.indexRepository = indexRepository;
-        this.lemmaRepository = lemmaRepository;
-        this.pageRepository = pageRepository;
-        this.siteRepository = siteRepository;
-        this.siteList = siteList;
-        this.lemmaService = lemmaService;
-        this.indexService = indexService;
-        this.pageService = pageService;
+    public IndexingServiceImpl(SiteRepository siteRepo, PageRepository pageRepo, IndexRepository indexRepo
+            , LemmaRepository lemmaRepo, SitesList sites, JsoupSession connectionFab, LemmaFinder lemmaFinder) {
+        this.siteRepo = siteRepo;
+        this.pageRepo = pageRepo;
+        this.indexRepo = indexRepo;
+        this.lemmaRepo = lemmaRepo;
+        this.sites = sites;
+        this.connectionFab = connectionFab;
+        this.lemmaFinder = lemmaFinder;
     }
-
 
     @Override
     public IndexingResponse startIndexing() {
-        FORK_JOIN_POOL = new ForkJoinPool(24);
-        mainExecutor = Executors.newFixedThreadPool(6);
-        executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
-
-        log.info("Попытка запуска индексации");
-        if (isIndexing.get()) {
-            log.error("Индексация уже запущена");
-            return IndexingResponse.builder()
-                    .result(false)
-                    .error("Индексация уже запущена")
-                    .build();
+        if(isIndexing.get()){
+            return IndexingResponse.builder().result(false).error(errors[1]).build();
         }
-
         deleteAllSitesData();
+        log.info("Starting indexing sites");
         isIndexing.set(true);
+        updateSitesInfo();
+        sites.getSites().forEach(site -> mainExecutor.execute(() -> {
+            String url = site.getUrl();
+            statusOfIndexing.put(url, true);
+            SiteEntity siteEntity = new SiteEntity();
+            siteEntity.setUrl(url);
+            siteEntity.setName(site.getName());
+            siteEntity.setStatus(SiteStatus.INDEXING);
+            siteEntity.setStatusTime(LocalDateTime.now());
+            siteRepo.save(siteEntity);
+            siteRepo.flush();
 
-        executorService.execute(() -> siteList
-                .getSites()
-                .forEach(site -> mainExecutor.execute(() -> {
-                    log.info("Запущена индексация страницы {}", site.getUrl());
+            try {
+                Set<String> set = ConcurrentHashMap.newKeySet();
+                IndexingTask task = new IndexingTask(pageRepo, indexRepo, lemmaRepo, new PageDTO(url), set, url
+                        , siteRepo.findSiteByUrl(url), connectionFab, lemmaFinder);
+                forkJoinPool.invoke(task);
+            } catch (Exception exception){
+                log.error("Error in IndexingService - startIndexing method: {}", exception.getMessage());
+            }
 
-                    SiteEntity siteEntity = new SiteEntity();
-                    siteEntity.setStatus(SiteStatus.INDEXING);
-                    siteEntity.setUrl(site.getUrl());
-                    siteEntity.setName(site.getName());
-                    siteRepository.save(siteEntity);
+            log.info("Pages from {} saved in DB", url);
+            statusOfIndexing.put(url, false);
+        }));
 
-                    SiteIndexingTask siteIndexing = new SiteIndexingTask(indexService, pageService, lemmaService, site.getUrl(),
-                            siteRepository.findByUrl(siteEntity.getUrl()), site.getUrl(), siteRepository);
-
-                    FORK_JOIN_POOL.invoke(siteIndexing);
-                }
-                ))
-        );
-
-        return IndexingResponse.builder()
-                .result(true)
-                .build();
+        return IndexingResponse.builder().result(true).build();
     }
-
 
     @Override
     public IndexingResponse stopIndexing() {
-        log.warn("Попытка остановить индексацию");
-        if (!isIndexing.get()) {
-            return IndexingResponse.builder()
-                    .result(false)
-                    .error("Индексация не запущена")
-                    .build();
+        if(!isIndexing.get()){
+            return IndexingResponse.builder().result(false).error(errors[2]).build();
         }
-
-        FORK_JOIN_POOL.shutdown();
-        try {
-            if (FORK_JOIN_POOL.awaitTermination(300, TimeUnit.MILLISECONDS)) {
-                FORK_JOIN_POOL.shutdownNow();
-                if (FORK_JOIN_POOL.awaitTermination(300, TimeUnit.MILLISECONDS)) {
-                    log.error("ForkJoinPool did not terminate!");
-                }
-            }
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        }
-
-        mainExecutor.shutdown();
-        try {
-            if (mainExecutor.awaitTermination(300, TimeUnit.MILLISECONDS)) {
-                mainExecutor.shutdownNow();
-                if (mainExecutor.awaitTermination(300, TimeUnit.MILLISECONDS)) {
-                    log.error("MainExecutor did not terminate!");
-                }
-            }
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        }
-
-        executorService.shutdown();
-        try {
-            if (executorService.awaitTermination(300, TimeUnit.MILLISECONDS)) {
-                executorService.shutdownNow();
-                if (executorService.awaitTermination(300, TimeUnit.MILLISECONDS)) {
-                    log.error("ExecutorService did not terminate!");
-                }
-            }
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        }
-
         isIndexing.set(false);
-        log.info("Индексация остановлена");
-        siteRepository.updateAllSitesStatus("INDEXED");
-
-        return IndexingResponse
-                .builder()
-                .result(true)
-                .build();
+        try {
+            forkJoinPool.shutdownNow();
+            IndexingTask.executor.shutdown();
+            if(IndexingTask.executor.awaitTermination(10000, TimeUnit.MILLISECONDS)){
+                IndexingTask.executor.shutdownNow();
+            }
+        } catch (Exception exception){
+            log.error("Error in IndexingService - stopIndexing method: {}", exception.getMessage());
+        }
+        sites.getSites().forEach(site -> {
+            String url = site.getUrl();
+            siteRepo.updateIndexingTimeByUrl(LocalDateTime.now(), url);
+            siteRepo.updateStatusByUrl(SiteStatus.INDEXED.toString(), url);
+        });
+        mainExecutor.shutdownNow();
+        log.info("Indexing is stopped!!!");
+        return IndexingResponse.builder().result(true).build();
     }
 
+    @Override
+    public IndexingResponse indexPage(String url) {
+        List<String> sitesUrls = sites.getSites().stream().map(Site::getUrl).toList();
+        boolean valid = sitesUrls.stream().anyMatch(url::contains);
+        if (url.contains("#") || url.contains(".sql") || url.contains(".zip")
+                || url.contains(".yaml") || url.contains(".jpg") || url.contains(".pdf")){
+            return IndexingResponse.builder().result(false).error("Provided url have incorrect type").build();
+        } else if(valid){
+            mainExecutor.execute(() -> {
+                SiteEntity siteModel = Optional
+                        .ofNullable(siteRepo.findSiteByUrl(sites.getSites()
+                                .stream()
+                                .map(Site::getUrl)
+                                .filter(url::contains)
+                                .collect(Collectors.joining())))
+                        .orElse(
+                            SiteEntity.builder()
+                                    .url(sites.getSites()
+                                            .stream()
+                                            .map(Site::getUrl)
+                                            .filter(url::contains)
+                                            .collect(Collectors.joining()))
+                                    .name(sites.getSites()
+                                            .stream()
+                                            .filter(s -> url.contains(s.getUrl()))
+                                            .map(Site::getName)
+                                            .collect(Collectors.joining()))
+                                    .status(SiteStatus.INDEXING)
+                                    .statusTime(LocalDateTime.now())
+                                    .build());
+                siteRepo.save(siteModel);
+                siteRepo.updateStatusByUrl(String.valueOf(SiteStatus.INDEXING), url);
+                connectAndParsePage(url, siteModel);
+                log.info("Indexing page: {} - is done!", url);
+                siteRepo.updateStatusByUrl(String.valueOf(SiteStatus.INDEXED), siteModel.getUrl());
+            });
+            return IndexingResponse.builder().result(true).build();
+        }
+        else{
+            return IndexingResponse.builder().result(false).error("""
+                    Данная страница находится за пределами сайтов,\s
+                    указанных в конфигурационном файле
+                    """).build();
+        }
+    }
+
+    @Override
     public void deleteAllSitesData() {
-        indexRepository.deleteAll();
-        pageRepository.deleteAll();
-        lemmaRepository.deleteAll();
-        siteRepository.deleteAll();
+        pageRepo.deleteAll();
+        siteRepo.deleteAll();
+        indexRepo.deleteAll();
+        lemmaRepo.deleteAll();
     }
 
+    private void updateSitesInfo(){
+        mainExecutor.execute(()->{
+            while(isIndexing.get()){
+                try {
+                    Thread.sleep(10000);
+                    updateAllSitesStatuses(SiteStatus.INDEXING);
+                } catch (InterruptedException e) {
+                    updateAllSitesStatuses(SiteStatus.FAILED);
+                    log.info(e.getMessage());
+                }
+                if(!statusOfIndexing.containsValue(true)){
+                    isIndexing.set(false);
+                    updateAllSitesStatuses(SiteStatus.INDEXED);
+                    log.info("Circle while is done!");
+                    break;
+                }
+            }
+            Thread.currentThread().interrupt();
+        });
+    }
+
+    private void updateAllSitesStatuses(SiteStatus status){
+        sites.getSites().forEach(site -> {
+            String url = site.getUrl();
+            siteRepo.updateIndexingTimeByUrl(LocalDateTime.now(), url);
+            siteRepo.updateStatusByUrl(String.valueOf(status), url);
+            log.info("StatusTime is updated...");
+        });
+    }
+
+    private void connectAndParsePage(String url, SiteEntity siteModel){
+        try {
+            Connection.Response response = connectionFab
+                    .JsoupConnection()
+                    .newRequest()
+                    .url(url)
+                    .execute();
+            Document doc = response.parse();
+            PageEntity pageModel = PageEntity.builder()
+                    .path(url.replace(siteModel.getUrl(), ""))
+                    .content(doc.toString())
+                    .httpStatusCode(response.statusCode())
+                    .siteId(siteModel)
+                    .build();
+            pageRepo.save(pageModel);
+            Map<String, Integer> lemmas = lemmaFinder.deleteTagsAndCollect(doc.toString());
+            lemmas.forEach((k, v)->{
+                lemmaRepo.updateOrInsertLemma(siteModel.getId(), k);
+                IndexEntity index = IndexEntity.builder()
+                        .lemma(lemmaRepo.findByLemma(k)) // лемма
+                        .rank(v) // кол-во данной леммы на странице
+                        .pageId(pageModel) // страница
+                        .build();
+                indexRepo.save(index);
+            });
+            lemmaRepo.flush();
+            indexRepo.flush();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
 }

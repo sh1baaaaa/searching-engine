@@ -1,148 +1,121 @@
 package searchengine.services.impl;
 
 import lombok.extern.slf4j.Slf4j;
-import org.apache.lucene.morphology.russian.RussianLuceneMorphology;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import searchengine.dto.SearchingResponseDTO;
 import searchengine.dto.SearchingResponseDataDTO;
 import searchengine.entity.IndexEntity;
+import searchengine.entity.LemmaEntity;
+import searchengine.entity.PageEntity;
+import searchengine.entity.SiteEntity;
 import searchengine.features.LemmaFinder;
-import searchengine.services.IndexService;
+import searchengine.repository.IndexRepository;
+import searchengine.repository.LemmaRepository;
+import searchengine.repository.PageRepository;
+import searchengine.repository.SiteRepository;
 import searchengine.services.SearchingService;
 
-import java.io.IOException;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 @Slf4j
 @Service
 public class SearchingServiceImpl implements SearchingService {
 
 
-    private final IndexService indexService;
+    private final LemmaRepository lemmaRepository;
 
-    private final LemmaFinder lemmaFinder = new LemmaFinder(new RussianLuceneMorphology());
+    private final PageRepository pageRepository;
 
-    @Autowired
-    public SearchingServiceImpl(IndexService indexService) throws IOException {
-        this.indexService = indexService;
+    private final SiteRepository siteRepository;
+
+    private final IndexRepository indexRepository;
+
+    private final LemmaFinder lemmatizator;
+
+    public SearchingServiceImpl(LemmaRepository lemmaRepository, PageRepository pageRepository, SiteRepository siteRepository, IndexRepository indexRepository, LemmaFinder lemmatizator) {
+        this.lemmaRepository = lemmaRepository;
+        this.pageRepository = pageRepository;
+        this.siteRepository = siteRepository;
+        this.indexRepository = indexRepository;
+        this.lemmatizator = lemmatizator;
     }
-
 
     @Override
-    public SearchingResponseDTO searchingRequest(String query, String offset, String limit, String site) {
-        return prepareSearchingResponse(query, site, offset, limit);
+    public SearchingResponseDTO search(String query, String siteUrl, Integer offset, Integer limit) {
+        Set<String> lemmas = lemmatizator.getLemmaSet(query);
+        log.info("Lemmas: {}", lemmas);
+        List<Integer> lemmasIds = lemmaRepository.findLemmasInSet(lemmas)
+                .stream()
+                .map(LemmaEntity::getId)
+                .collect(Collectors.toCollection(ArrayList::new));
+        SiteEntity siteModel = siteUrl == null ? null : siteRepository.findSiteByUrl(siteUrl);
+        List<PageEntity> pagesWithLemmas = new ArrayList<>(
+                pageRepository.findPagesWithLemmasAndSite(
+                        lemmas,
+                        siteModel == null ? 0 : siteModel.getId(),
+                        query.split("\\s+").length)
+        );
+
+        return makeSearchingResponse(pagesWithLemmas, lemmas, lemmasIds, siteModel, query, limit, offset);
     }
 
-    private SearchingResponseDTO prepareSearchingResponse(String query, String site, String offset, String limit) {
+    public SearchingResponseDTO makeSearchingResponse(List<PageEntity> pages, Set<String> lemmas
+            , List<Integer> lemmasIds, SiteEntity siteModel, String query, Integer limit, Integer offset){
+        List<SearchingResponseDataDTO> dataList = new ArrayList<>();
+        Map<PageEntity, Integer> pageWithAbsRelevance = new HashMap<>();
+        AtomicInteger maxRankSum = new AtomicInteger(0);
+        pages.forEach(p->{
+            List<IndexEntity> indexes = indexRepository.findIndexByPageIdAndLemmas(p.getId(), lemmasIds);
+            int sumOfRanks = indexes.stream().mapToInt(IndexEntity::getRank).sum();
+            pageWithAbsRelevance.put(p, sumOfRanks);
+            if(sumOfRanks > maxRankSum.get()){
+                maxRankSum.set(sumOfRanks);
+            }
+        });
+        pageWithAbsRelevance.forEach((page, pageRank) -> {
+            log.info("Page: {}", page.getPath());
+            String content = page.getContent();
 
-        final Map<String, List<IndexEntity>> lemmasAndIndexMap = new HashMap<>();
+            SearchingResponseDataDTO searchingData = SearchingResponseDataDTO.builder()
+                    .site(siteModel != null ? siteModel.getUrl()
+                            : siteRepository.findById(page.getSiteId().getId()).map(SiteEntity::getUrl).get())
+                    .siteName(siteModel != null ? siteModel.getName()
+                            : siteRepository.findById(page.getSiteId().getId()).map(SiteEntity::getName).get())
+                    .uri(page.getPath())
+                    .snippet(createSnippet(content, lemmas, query))
+                    .relevance((float) (pageRank.doubleValue() / maxRankSum.doubleValue()))
+                    .build();
 
-        Map<String, Integer> queryLemmas = lemmaFinder.collectLemmas(query);
+            try {
+                searchingData.setTitle(content.split("<title>")[1].split("</title>")[0]);
+            } catch (ArrayIndexOutOfBoundsException e) {
+                searchingData.setTitle("Playback");
+                log.error("{} does not contain title", page.getPath());
+            }
 
-        List<String> actualLemmas = queryLemmas.keySet()
-                .stream()
-                .filter(lemma -> indexService.findLemmaCount(lemma) < 100)
-                .collect(Collectors.toList());;
-        actualLemmas.sort(Comparator.comparing(queryLemmas::get));
-
-        if (site == null) {
-            actualLemmas.forEach(lemma -> {
-                AtomicReference<List<IndexEntity>> foundLemmas
-                        = new AtomicReference<>(indexService.findByLemma(lemma));
-
-                actualLemmas.stream()
-                        .filter(secondLemma -> !secondLemma.equals(lemma))
-                        .forEach(secondLemma -> foundLemmas.set(foundLemmas.get()
-                                .stream()
-                                .filter(index -> index.getPage().getIndexes()
-                                        .stream()
-                                        .anyMatch(check -> check.getLemma().getLemma().equals(secondLemma)))
-                                .toList()));
-
-                lemmasAndIndexMap.put(lemma, foundLemmas.get());
-            });
-        } else {
-            actualLemmas.forEach(lemma -> {
-                AtomicReference<List<IndexEntity>> foundLemmas
-                        = new AtomicReference<>(indexService.findByLemmaAndSite(actualLemmas.get(0), site));
-                actualLemmas.forEach(lemma1 -> foundLemmas.set(foundLemmas
-                        .get()
-                        .stream()
-                        .filter(index -> indexService.findByLemmaAndSite(lemma, site).contains(index))
-                        .toList()));
-
-                lemmasAndIndexMap.put(lemma, foundLemmas.get());
-            });
-        }
-
-
-        List<SearchingResponseDataDTO> responseData = prepareSearchingResponseDataDTO(lemmasAndIndexMap
-                , actualLemmas, query)
-                .stream()
-                .limit(Integer.parseInt(limit))
-                .skip(Long.parseLong(offset))
-                .toList();
+            dataList.add(searchingData);
+        });
 
         return SearchingResponseDTO.builder()
-                .count(responseData.size())
-                .data(responseData)
                 .result(true)
+                .data(dataList
+                        .stream()
+                        .distinct()
+                        .sorted(Comparator.comparingDouble(SearchingResponseDataDTO::getRelevance).reversed())
+                        .skip(offset)
+                        .limit(limit)
+                        .toList())
+                .count(dataList.size())
                 .build();
     }
 
-    private List<SearchingResponseDataDTO> prepareSearchingResponseDataDTO(Map<String, List<IndexEntity>> pages
-            , List<String> lemmas, String query) {
-        List<String> checkedPage = new ArrayList<>();
-        List<SearchingResponseDataDTO> response = new ArrayList<>();
-
-        pages.forEach((key, value) -> value.forEach(index1 -> {
-            if (!checkedPage.contains(index1.getPage().getPath())) {
-                AtomicReference<Float> relevance = new AtomicReference<>(index1.getRank() / 10F);
-
-                pages.forEach((key1, value1) -> {
-                    if (!key.equals(key1)) {
-                        value1.forEach(index2 -> {
-                            if (index1.getPage().getId().equals(index2.getPage().getId())
-                                    && !checkedPage.contains(index1.getPage().getPath())) {
-                                relevance.updateAndGet(v -> v + index2.getRank() / 10F);
-                            }
-                        });
-                    }
-                });
-
-                try {
-                    response.add(SearchingResponseDataDTO.builder()
-                            .relevance(relevance.get())
-                            .uri(index1.getPage().getPath())
-                            .title(Jsoup.connect(index1.getPage()
-                                    .getSite()
-                                    .getUrl()
-                                    .substring(0, index1.getPage().getSite().getUrl().length() - 1)
-                                    + index1.getPage().getPath()).get().title())
-                            .snippet(createSnippet(index1.getPage().getContent(), lemmas, query))
-                            .site(index1.getPage().getSite().getUrl())
-                            .siteName(index1.getPage().getSite().getName())
-                            .build());
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
-                }
-
-                checkedPage.add(index1.getPage().getPath());
-            }
-        }));
-        response.sort(Comparator.comparing(SearchingResponseDataDTO::getRelevance).reversed());
-        return response;
-    }
-
-    private String createSnippet(String content, List<String> lemmas, String query) {
+    private String createSnippet(String content, Set<String> lemmas, String query) {
         String snippet = "";
         Document doc = Jsoup.parse(content);
         String metaDescription = doc.select("meta[name=description]").attr("content");
@@ -160,7 +133,7 @@ public class SearchingServiceImpl implements SearchingService {
             }
         }
         else{
-            String text = lemmaFinder.deleteHTMLTags(content);
+            String text = lemmatizator.deleteAllHtmlTags(content);
             String sentenceRegex = "[^.!?]*[.!?]";
             Pattern pattern = Pattern.compile(sentenceRegex);
             Matcher matcher = pattern.matcher(text);
@@ -183,7 +156,7 @@ public class SearchingServiceImpl implements SearchingService {
         return snippet;
     }
 
-    private Boolean containsAny(String text, Collection<String> lemmas) {
+    public static boolean containsAny(String text, Collection<String> lemmas) {
         for (String lemma : lemmas) {
             if (text.contains(lemma)) {
                 return true;
@@ -191,6 +164,7 @@ public class SearchingServiceImpl implements SearchingService {
         }
         return false;
     }
+
 
 }
     

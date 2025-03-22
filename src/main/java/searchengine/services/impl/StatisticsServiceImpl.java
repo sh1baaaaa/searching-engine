@@ -15,6 +15,7 @@ import searchengine.services.StatisticsService;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 @Service
 @RequiredArgsConstructor
@@ -32,7 +33,7 @@ public class StatisticsServiceImpl implements StatisticsService {
         total.setIndexing(true);
 
         List<DetailedStatisticsItem> detailed = new ArrayList<>();
-        List<Site> sitesList = sites.getSites();
+        ConcurrentLinkedQueue<Site> sitesList = sites.getSites();
         sitesList.forEach(site -> {
 
             DetailedStatisticsItem item = new DetailedStatisticsItem();

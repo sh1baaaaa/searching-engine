@@ -1,10 +1,12 @@
 package searchengine.entity;
 
 import javax.persistence.*;
-import lombok.Getter;
-import lombok.Setter;
 
+import lombok.*;
 
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 @Setter
 @Getter
 @Table(name = "`index`")
@@ -18,7 +20,7 @@ public class IndexEntity {
 
     @ManyToOne(cascade = {CascadeType.MERGE})
     @JoinColumn(name = "page_id", nullable = false)
-    private PageEntity page;
+    private PageEntity pageId;
 
     @ManyToOne(cascade = {CascadeType.MERGE})
     @JoinColumn(name = "lemma_id", nullable = false)
